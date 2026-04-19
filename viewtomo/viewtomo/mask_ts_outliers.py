@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-CryoET Tilt Series Homogenizer (Physics-Based)
+automated masking for view tilt series
 ----------------------------------------------
 Identifies and masks obscured (low-intensity) and vacuum (high-intensity) regions
 using robust physics modeling (Beer-Lambert & Polynomial traces) across the tilt series.

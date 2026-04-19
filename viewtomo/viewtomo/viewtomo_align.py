@@ -2,8 +2,6 @@
 """
 viewtomo_align.py
 -----------------
-Automated pipeline for Cryo-Electron Tomography (Cryo-ET) alignment and reconstruction.
-Supports both AreTomo2 (GPU-accelerated) and IMOD/Etomo (CPU patch-tracking) backends.
 """
 import os
 import sys
