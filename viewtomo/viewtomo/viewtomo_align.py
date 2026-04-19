@@ -328,22 +328,22 @@ class EtomoEngine(BaseAlignmentEngine):
 def main():
     parser = argparse.ArgumentParser(description="Automated Cryo-ET Alignment and Reconstruction")
     parser.add_argument("inputs", nargs='+', help="Input MRC stack(s)")
-    parser.add_argument("--engine", choices=['imod', 'aretomo2'], default='aretomo2', help="Alignment engine")
-    parser.add_argument("--align_nm", type=float, default=150.0, help="Alignment thickness in nm")
-    parser.add_argument("--final_nm", type=float, default=300.0, help="Reconstruction thickness in nm")
-    parser.add_argument("--aretomo_binning", type=int, default=4, help="Binning for alignment pass")
-    parser.add_argument("--tomo_binning", type=int, default=2, help="Binning for final reconstruction")
-    parser.add_argument("--imagebinned", type=int, default=1, help="Pre-binning factor of the input images (scales patch tracking size).")
-    parser.add_argument("--template", type=str, default="krios.adoc", help="Path to IMOD system template (.adoc)")
-    parser.add_argument("--workers", type=int, default=8, help="Number of CPU workers for python masking")
-    parser.add_argument("--debug", action="store_true", help="Enable debug logging and plotting for the masking phase")
+    parser.add_argument("--engine", choices=['imod', 'aretomo2'], default='aretomo2', help="Alignment engine, default Aretomo2")
+    parser.add_argument("--align_nm", type=float, default=150.0, help="Alignment thickness in nm, default 150")
+    parser.add_argument("--final_nm", type=float, default=300.0, help="Reconstruction thickness in nm, default 300")
+    parser.add_argument("--aretomo_binning", type=int, default=4, help="Binning for alignment pass, default 4")
+    parser.add_argument("--tomo_binning", type=int, default=4, help="Binning for final reconstruction, default 4")
+    parser.add_argument("--imagebinned", type=int, default=1, help="Pre-binning factor of the input images (scales patch tracking size), default 1.")
+    parser.add_argument("--template", type=str, default="krios.adoc", help="Path to IMOD system template (.adoc). Uses default 'krios.adoc' in tmeplates")
+    parser.add_argument("--workers", type=int, default=8, help="Number of CPU workers for python masking, default 8")
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging and plotting for the masking phase. Writes a useful histogram plot.")
     parser.add_argument("--skip_mask", action="store_true", help="Completely bypass outlier masking phase")
     
     # Advanced Masking Constraints
     parser.add_argument("--mask_low_cut", type=float, default=0.05, help="Lower threshold cut factor. Lower values (e.g. 0.05) result in gentler masking of dark features.")
     parser.add_argument("--mask_high_cut", type=float, default=0.05, help="Upper threshold cut factor. Lower values result in gentler masking of bright features/vacuum.")
-    parser.add_argument("--mask_dilation", type=int, default=3, help="Mask boundary dilation in pixels. Lower values (e.g. 3) reduce masking spill-over into biological material.")
-    parser.add_argument("--wiggle", type=float, default=1.0, help="Relaxation factor. Wiggles expand the safety margin significantly at high tilts.")
+    parser.add_argument("--mask_dilation", type=int, default=5, help="Mask boundary dilation in pixels. Lower values (e.g. 3) reduce masking spill-over into biological material. Default 5")
+    parser.add_argument("--wiggle", type=float, default=1.0, help="Masking becomes more stringent with increasing tilt. Higher values make higher tilts be masked less harshly, default 1.")
     
     args = parser.parse_args()
 
