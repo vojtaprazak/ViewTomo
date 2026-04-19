@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "viewtomo"
+version = "0.1.0"
+description = "Automated Cryo-ET outlier masking and alignment pipeline"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "numpy",
+    "scipy",
+    "matplotlib",
+    "psutil",
+    "mrcfile",
+    "scikit-learn"
+]
+
+[project.scripts]
+viewtomo_align = "viewtomo.viewtomo_align:main"
