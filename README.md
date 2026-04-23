@@ -8,7 +8,8 @@ Installation
 
 Ensure you have IMOD and AreTomo2 installed and available in your PATH.
 
-git clone [https://github.com/yourusername/viewtomo.git](https://github.com/yourusername/viewtomo.git)
+git clone [https://github.com/vojtaprazak/viewtomo.git](https://github.com/yourusername/viewtomo.git)
+
 cd viewtomo
 pip install -e .
 
