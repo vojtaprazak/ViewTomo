@@ -4,54 +4,47 @@ viewtomo is a Python-based pipeline designed to streamline the processing of "vi
 
 📖 Read our preprint on bioRxiv: Automated ViewTomo Alignment and Reconstruction
 
-# 🚀 Quickstart (For the Impatient, a detailed guide is below)
+# 🚀 Quickstart (For the Impatient)
+### A detailed guide can be found below
 
 If you are familiar with Python virtual environments and Git, you can get started in seconds:
 
 1. Install
-
+```bash
 git clone [https://github.com/vojtaprazak/ViewTomo.git](https://github.com/vojtaprazak/ViewTomo.git)
 cd ViewTomo
 python3 -m venv viewtomo_venv
 source viewtomo_venv/bin/activate
 pip install -e .
-
+```
 
 2. Basic Usage
 
 Run the pipeline on a single tilt series (uses AreTomo2 by default):
-
+```bash
 viewtomo_align.py ts01.mrc
-
+```
 
 Or process an entire folder of tilt series automatically:
+```
 example/
 ├── ts01.mrc
 └── ts02.mrc
-
+```
+```bash
 viewtomo_align.py ts*.mrc
-
+```
 This creates
+```
 example/
 ├── ts01
-└── ts02
+│   └── <reconstructed Etomo project>
+├── ts01.mrc
+├── ts02
+│   └── <reconstructed Etomo project>
+└── ts02.mrc
 
-
-
-
-🧠 How It Works (The Procedure)
-
-viewtomo is designed to be an automated pipeline that still leaves you with full control over the final data. The script performs the following sequential steps for every .mrc stack provided:
-
-Automated deterministic histogram-based Masking: Identifies and inpaints obscured regions (e.g., thick ice, grid bars) and vacuum using Beer-Lambert and polynomial traces. This helps with alignment stability on lamella.
-
-Tilt Series Alignment: Aligns the masked stack using either markerless AreTomo2 (default) or IMOD patch-tracking.
-
-Etomo Project Creation: Seamlessly builds a native IMOD/Etomo project, translating AreTomo2 coordinates into IMOD-compatible directives.
-
-Tomogram Reconstruction: Calculates positioning, pitch, and generates the final reconstructed tomogram in Etomo.
-
-Crucial Feature: Because viewtomo builds a standard IMOD project in the background, you can always open the resulting .edf file in the Etomo GUI. If you are unhappy with the automated reconstruction, simply open your_dataset.edf in Etomo and modify, re-align, or re-reconstruct any part of it exactly as you would normally!
+```
 
 # 🐢 Detailed Guide
 
@@ -78,33 +71,53 @@ cd ViewTomo
 A virtual environment is a self-contained folder that holds Python packages. It prevents viewtomo's dependencies from clashing with other Python software on your system.
 
 ### Create the environment
+```bash
 python3 -m venv viewtomo_venv
-
+```
 ### Activate the environment (you must do this every time you open a new terminal)
+```bash
 source viewtomo_venv/bin/activate
-
+```
 
 (You will know it worked if your terminal prompt now starts with (viewtomo_venv)).
 
 ## Step 3: Install the Package
 
 Now, use pip (Python's package installer) to install the code. The -e . flag stands for "editable", meaning if you update the code via git pull later, you won't need to reinstall it.
-
+```bash
 pip install -e .
-
+```
 
 ## Step 4: Run the Script
 
 As long as your virtual environment is active, the viewtomo_align.py command is now available anywhere on your system.
 
 Navigate to the folder containing your data
+```bash
 cd /path/to/your/mrc/files/
-
+```
 Run the alignment script
+```bash
 viewtomo_align.py my_tilt_series.mrc
+```
 
 
-⚙️ Advanced Usage & Parameters
+# 🧠 How It Works (The Procedure)
+
+viewtomo is designed to be an automated pipeline that still leaves you with full control over the final data. The script performs the following sequential steps for every .mrc stack provided:
+
+Automated deterministic histogram-based Masking: Identifies and inpaints obscured regions (e.g., thick ice, grid bars) and vacuum using Beer-Lambert and polynomial traces. This helps with alignment stability on lamella.
+
+Tilt Series Alignment: Aligns the masked stack using either markerless AreTomo2 (default) or IMOD patch-tracking.
+
+Etomo Project Creation: Seamlessly builds a native IMOD/Etomo project, translating AreTomo2 coordinates into IMOD-compatible directives.
+
+Tomogram Reconstruction: Calculates positioning, pitch, and generates the final reconstructed tomogram in Etomo.
+
+Crucial Feature: Because viewtomo builds a standard IMOD project in the background, you can always open the resulting .edf file in the Etomo GUI. If you are unhappy with the automated reconstruction, simply open your_dataset.edf in Etomo and modify, re-align, or re-reconstruct any part of it exactly as you would normally!
+
+
+# ⚙️ Advanced Usage & Parameters
 
 You can customize the pipeline's behavior using command-line arguments.
 
