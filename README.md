@@ -2,7 +2,8 @@ ViewTomo: Automated Cryo-ET Alignment and Reconstruction
 
 viewtomo is a Python-based pipeline designed to streamline the processing of "view magnification" Cryo-Electron Tomography (Cryo-ET) datasets. It provides a highly robust, automated interface for both GPU-accelerated alignment via AreTomo2 and traditional CPU patch-tracking workflows using IMOD/Etomo.
 
-📖 Read our preprint on bioRxiv: Automated ViewTomo Alignment and Reconstruction
+📖 Read our preprint on bioRxiv:
+https://www.biorxiv.org/content/10.64898/2026.04.21.719727v1
 
 # 🚀 Quickstart (For the Impatient)
 ### A detailed guide can be found below
@@ -56,13 +57,15 @@ Before installing viewtomo, ensure your system has the following software instal
 
 IMOD
 
-AreTomo2
+AreTomo2 - this is optional. The script will run if used with the flag `--engine imod` 
 
 ## Step 1: Download the Code
 
-You need to copy the code from GitHub to your local computer or cluster. In your terminal, run:
+You need to copy the code from GitHub to your local computer or cluster. First, navigate to a directory where you would like to install this library. A subdirectory "viewtomo" will be created automatically.
+
+In your terminal, run:
 ```bash
-git clone [https://github.com/vojtaprazak/ViewTomo.git](https://github.com/vojtaprazak/ViewTomo.git)
+git clone https://github.com/vojtaprazak/ViewTomo.git
 cd ViewTomo
 ```
 
