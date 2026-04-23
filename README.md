@@ -4,7 +4,7 @@ viewtomo is a Python-based pipeline designed to streamline the processing of "vi
 
 📖 Read our preprint on bioRxiv: Automated ViewTomo Alignment and Reconstruction
 
-🚀 Quickstart (For the Impatient, a detailed guide is below)
+# 🚀 Quickstart (For the Impatient, a detailed guide is below)
 
 If you are familiar with Python virtual environments and Git, you can get started in seconds:
 
@@ -12,20 +12,31 @@ If you are familiar with Python virtual environments and Git, you can get starte
 
 git clone [https://github.com/vojtaprazak/ViewTomo.git](https://github.com/vojtaprazak/ViewTomo.git)
 cd ViewTomo
-python3 -m venv .venv
-source .venv/bin/activate
+python3 -m venv viewtomo_venv
+source viewtomo_venv/bin/activate
 pip install -e .
 
 
 2. Basic Usage
+
 Run the pipeline on a single tilt series (uses AreTomo2 by default):
 
 viewtomo_align.py ts01.mrc
 
 
 Or process an entire folder of tilt series automatically:
+example/
+├── ts01.mrc
+└── ts02.mrc
 
 viewtomo_align.py ts*.mrc
+
+This creates
+example/
+├── ts01
+└── ts02
+
+
 
 
 🧠 How It Works (The Procedure)
@@ -42,7 +53,7 @@ Tomogram Reconstruction: Calculates positioning, pitch, and generates the final 
 
 Crucial Feature: Because viewtomo builds a standard IMOD project in the background, you can always open the resulting .edf file in the Etomo GUI. If you are unhappy with the automated reconstruction, simply open your_dataset.edf in Etomo and modify, re-align, or re-reconstruct any part of it exactly as you would normally!
 
-🐢 Detailed Guide 
+# 🐢 Detailed Guide
 
 If you are new to using GitHub, Python packages, or the command line, follow these steps.
 
@@ -54,7 +65,7 @@ IMOD
 
 AreTomo2
 
-Step 1: Download the Code
+## Step 1: Download the Code
 
 You need to copy the code from GitHub to your local computer or cluster. In your terminal, run:
 
@@ -62,34 +73,34 @@ git clone [https://github.com/vojtaprazak/ViewTomo.git](https://github.com/vojta
 cd ViewTomo
 
 
-Step 2: Create a Virtual Environment
+### Optional Step 2: Create a Virtual Environment
 
 A virtual environment is a self-contained folder that holds Python packages. It prevents viewtomo's dependencies from clashing with other Python software on your system.
 
-# Create the environment (creates a folder named '.venv')
+### Create the environment
 python3 -m venv viewtomo_venv
 
-# Activate the environment (you must do this every time you open a new terminal)
+### Activate the environment (you must do this every time you open a new terminal)
 source viewtomo_venv/bin/activate
 
 
-(You will know it worked if your terminal prompt now starts with (.venv)).
+(You will know it worked if your terminal prompt now starts with (viewtomo_venv)).
 
-Step 3: Install the Package
+## Step 3: Install the Package
 
 Now, use pip (Python's package installer) to install the code. The -e . flag stands for "editable", meaning if you update the code via git pull later, you won't need to reinstall it.
 
 pip install -e .
 
 
-Step 4: Run the Script
+## Step 4: Run the Script
 
 As long as your virtual environment is active, the viewtomo_align.py command is now available anywhere on your system.
 
-# Navigate to the folder containing your data
+Navigate to the folder containing your data
 cd /path/to/your/mrc/files/
 
-# Run the alignment script
+Run the alignment script
 viewtomo_align.py my_tilt_series.mrc
 
 
@@ -107,6 +118,8 @@ Engine Selection & Geometry:
 
 --imagebinned 1: If your input .mrc files are already binned, specify the factor here so patch tracking sizes scale correctly.
 
+--template lamella.adoc: Path to IMOD system template (.adoc). Uses default lamella.adoc in templates.
+
 Masking Parameters:
 If the automated masking is too harsh or too gentle, you can tune it:
 
@@ -123,4 +136,3 @@ If the automated masking is too harsh or too gentle, you can tune it:
 Example of an advanced run:
 
 viewtomo_align.py *.mrc --engine imod --tomo_binning 8 --mask_low_cut 0.02 --debug
-
