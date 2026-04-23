@@ -61,10 +61,10 @@ AreTomo2
 ## Step 1: Download the Code
 
 You need to copy the code from GitHub to your local computer or cluster. In your terminal, run:
-
+```bash
 git clone [https://github.com/vojtaprazak/ViewTomo.git](https://github.com/vojtaprazak/ViewTomo.git)
 cd ViewTomo
-
+```
 
 ### Optional Step 2: Create a Virtual Environment
 
