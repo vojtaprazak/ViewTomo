@@ -16,6 +16,7 @@ git clone [https://github.com/vojtaprazak/ViewTomo.git](https://github.com/vojta
 cd ViewTomo
 python3 -m venv viewtomo_venv
 source viewtomo_venv/bin/activate
+cd viewtomo
 pip install -e .
 ```
 
@@ -88,6 +89,7 @@ source viewtomo_venv/bin/activate
 
 Now, use pip (Python's package installer) to install the code. The -e . flag stands for "editable", meaning if you update the code via git pull later, you won't need to reinstall it.
 ```bash
+cd viewtomo
 pip install -e .
 ```
 
