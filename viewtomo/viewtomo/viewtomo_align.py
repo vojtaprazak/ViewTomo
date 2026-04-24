@@ -147,7 +147,7 @@ class AreTomoEngine(BaseAlignmentEngine):
             "-OutMrc", str(out_mrc),
             "-VolZ", str(self.params['final_thickness_px']),
             "-AlignZ", str(self.params['align_thickness_px']),
-            "-OutBin", str(self.params['aretomo_binning']),
+            "-OutBin", str(self.params['eff_aretomo_binning']),
             "-AngFile", str(ang_file),
             "-DarkTol", "0.1",
             "-Wbp", "1",
@@ -165,7 +165,7 @@ class AreTomoEngine(BaseAlignmentEngine):
             efa.run_etomo_translation(
                 dirs=[str(self.work_dir)],
                 template=str(self.params['template_path']),
-                tomo_binning=self.params['tomo_binning'],
+                tomo_binning=self.params['eff_tomo_binning'],
                 tomo_thickness=self.params['final_thickness_px']
             )
         except Exception as e:
@@ -210,12 +210,12 @@ class EtomoEngine(BaseAlignmentEngine):
         shutil.copy2(self.params['template_path'], adoc_path)
         
         unbinned_thick = self.params['final_thickness_px']
-        patch_binning = self.params['aretomo_binning']
+        patch_binning = self.params['eff_aretomo_binning']
         image_binned = self.params.get('imagebinned', 1)
         
-        # Scaling based on imagebinned
-        SizeOfPatchesXandY = int((42 * patch_binning) / image_binned)
-        patchtrack_border = int((27 * patch_binning) / image_binned)
+        # Scaling based on target absolute binning to get coordinates in the input MRC space
+        SizeOfPatchesXandY = int((42 * self.params['aretomo_binning']) / image_binned)
+        patchtrack_border = int((27 * self.params['aretomo_binning']) / image_binned)
 
         overrides = {
             "setupset.copyarg.name": self.base_name,
@@ -228,7 +228,7 @@ class EtomoEngine(BaseAlignmentEngine):
             "comparam.prenewst.newstack.BinByFactor": str(patch_binning),
             "runtime.Positioning.any.binByFactor": "8",
             "runtime.Positioning.any.thickness": str(unbinned_thick),
-            "runtime.AlignedStack.any.binByFactor": str(self.params['tomo_binning']),
+            "runtime.AlignedStack.any.binByFactor": str(self.params['eff_tomo_binning']),
             "comparam.tilt.tilt.THICKNESS": str(unbinned_thick),
             "comparam.cryoposition.cryoposition.BinningToApply": "8"
         }
@@ -273,13 +273,13 @@ class EtomoEngine(BaseAlignmentEngine):
         self.linked_mrc.symlink_to(self.unmasked_mrc)
 
         edf_path = self.work_dir / f"{self.base_name}.edf"
-        final_size = determine_output_size(str(self.linked_mrc), str(edf_path), self.params['tomo_binning'])
+        final_size = determine_output_size(str(self.linked_mrc), str(edf_path), self.params['eff_tomo_binning'])
         
         newst_lines = (self.work_dir / "newst.com").read_text().splitlines()
         new_lines = []
         for line in newst_lines:
             if line.startswith("$newstack"):
-                new_lines.extend([line, f"BinByFactor    {self.params['tomo_binning']}"])
+                new_lines.extend([line, f"BinByFactor    {self.params['eff_tomo_binning']}"])
             elif line.startswith("SizeToOutputInXandY"):
                 new_lines.append(f"SizeToOutputInXandY    {final_size}")
             else:
@@ -287,7 +287,7 @@ class EtomoEngine(BaseAlignmentEngine):
         (self.work_dir / "newst.com").write_text("\n".join(new_lines))
         run_cmd(["submfg", "newst.com"], cwd=self.work_dir)
         
-        self._update_com("tilt.com", "IMAGEBINNED", str(self.params['tomo_binning']))
+        self._update_com("tilt.com", "IMAGEBINNED", str(self.params['eff_tomo_binning']))
         self._update_com("tilt.com", "OutputFile", f"{self.base_name}_full_rec.mrc")
         self._update_com("tilt.com", "THICKNESS", str(self.params['final_thickness_px']))
         run_cmd(["submfg", "tilt.com"], cwd=self.work_dir)
@@ -298,9 +298,9 @@ def main():
     parser.add_argument("--engine", choices=['imod', 'aretomo2'], default='aretomo2', help="Alignment engine, default Aretomo2")
     parser.add_argument("--align_nm", type=float, default=150.0, help="Alignment thickness in nm, default 150")
     parser.add_argument("--final_nm", type=float, default=300.0, help="Reconstruction thickness in nm, default 300")
-    parser.add_argument("--aretomo_binning", type=int, default=4, help="Binning for alignment pass, default 4")
-    parser.add_argument("--tomo_binning", type=int, default=4, help="Binning for final reconstruction, default 4")
-    parser.add_argument("--imagebinned", type=int, default=1, help="Pre-binning factor of input images (scales patch tracking geometry), default 1.")
+    parser.add_argument("--aretomo_binning", type=int, default=4, help="Target absolute binning for alignment pass, default 4")
+    parser.add_argument("--tomo_binning", type=int, default=4, help="Target absolute binning for final reconstruction, default 4")
+    parser.add_argument("--imagebinned", type=int, default=1, help="Pre-binning factor of input images, default 1.")
     parser.add_argument("--template", type=str, default="lamella.adoc", help="Path to IMOD system template (.adoc). Uses default 'lamella.adoc' in templates")
     parser.add_argument("--workers", type=int, default=8, help="Number of CPU workers for python masking, default 8")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging and plotting for the masking phase.")
@@ -318,6 +318,20 @@ def main():
     except RuntimeError as e:
         print(f"\n[CRITICAL ERROR] {e}")
         sys.exit(1)
+
+    # Calculate effective binning multipliers for downstream tools
+    eff_aretomo = max(1, args.aretomo_binning // args.imagebinned)
+    eff_tomo = max(1, args.tomo_binning // args.imagebinned)
+
+    if args.imagebinned > args.aretomo_binning:
+        print(f"\n[WARNING] Input is {args.imagebinned}x binned. Cannot align at {args.aretomo_binning}x. Effective align binning will be {args.imagebinned}x.")
+    elif args.aretomo_binning % args.imagebinned != 0:
+        print(f"\n[WARNING] Target align binning ({args.aretomo_binning}) is not cleanly divisible by input binning ({args.imagebinned}). Effective align binning will be {eff_aretomo * args.imagebinned}x.")
+
+    if args.imagebinned > args.tomo_binning:
+        print(f"[WARNING] Input is {args.imagebinned}x binned. Cannot reconstruct at {args.tomo_binning}x. Effective tomo binning will be {args.imagebinned}x.")
+    elif args.tomo_binning % args.imagebinned != 0:
+        print(f"[WARNING] Target tomo binning ({args.tomo_binning}) is not cleanly divisible by input binning ({args.imagebinned}). Effective tomo binning will be {eff_tomo * args.imagebinned}x.\n")
 
     template_path = resolve_template_path(args.template)
     for input_file in args.inputs:
@@ -340,6 +354,8 @@ def main():
                 'dust': args.dust,
                 'aretomo_binning': args.aretomo_binning,
                 'tomo_binning': args.tomo_binning,
+                'eff_aretomo_binning': eff_aretomo,
+                'eff_tomo_binning': eff_tomo,
                 'imagebinned': args.imagebinned,
                 'template_path': template_path,
                 'workers': args.workers
