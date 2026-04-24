@@ -160,21 +160,17 @@ class AreTomoEngine(BaseAlignmentEngine):
     def call_etomo_from_aretomo2(self):
         """Invokes the translation module to build IMOD-compatible alignments."""
         print(">> Handing off to etomo_from_aretomo2 for translation and reconstruction...")
-        original_argv = sys.argv
-        sys.argv = [
-            "etomo_from_aretomo2",
-            str(self.work_dir),
-            "--template", str(self.params['template_path']),
-            "--tomo_binning", str(self.params['tomo_binning']),
-            "--tomo_thickness", str(self.params['final_thickness_px'])
-        ]
+        
         try:
-            efa.main()
-        except SystemExit as e:
-            if e.code != 0 and e.code is not None:
-                raise RuntimeError(f"etomo_from_aretomo2 failed with exit code {e.code}")
-        finally:
-            sys.argv = original_argv
+            efa.run_etomo_translation(
+                dirs=[str(self.work_dir)],
+                template=str(self.params['template_path']),
+                tomo_binning=self.params['tomo_binning'],
+                tomo_thickness=self.params['final_thickness_px']
+            )
+        except Exception as e:
+            raise RuntimeError(f"etomo_from_aretomo2 failed: {e}")
+            
         print(f"--- Success! Pipeline completed for {self.base_name} ---")
 
 

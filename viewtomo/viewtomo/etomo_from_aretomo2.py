@@ -286,25 +286,14 @@ def run_etomo_directive(adoc_path, headless=True):
     subprocess.check_call(cmd)
 
 
-def main():
-    p = argparse.ArgumentParser(description="Generate per-dataset IMOD directives from header info and run etomo.")
-    p.add_argument("dirs", nargs="+", help="Dataset directories (basename must match tilt-series filename)")
-    p.add_argument("--template", "-t", required=True, help="Directive template (.adoc). You can use e.g. the default system templates found in [IMOD directory]/SystemTemplate/cryoSample.adoc ")
-    p.add_argument("--gold", type=float, default=10.0, help="Fiducial diameter to set as setupset.copyarg.gold (default: 10)")
-    p.add_argument("--stackext", help="Force stack extension (e.g. mrc) rather than auto-detect")
-    p.add_argument("--no-run", action="store_true", help="Only create directives; do not run etomo")
-    p.add_argument("--skip-existing", action="store_true", help="Skip dataset if directives/<basename>.adoc already exists")
-    p.add_argument("--tomo_binning",type=int, default=6)
-    p.add_argument("--tomo_thickness",type=int, default=3000)
-    p.add_argument("--do_not_run_comfiles", default=False, action='store_true')
-    args = p.parse_args()
-
+def run_etomo_translation(dirs, template, gold=10.0, stackext=None, no_run=False, skip_existing=False, tomo_binning=6, tomo_thickness=3000, do_not_run_comfiles=False):
+    """Core translation logic extracted from the CLI parser for safe modular execution."""
     cwd = os.getcwd()
-    template = os.path.abspath(args.template)
+    template = os.path.abspath(template)
     if not os.path.isfile(template):
-        raise SystemExit(f"Template not found: {template}")
+        raise FileNotFoundError(f"Template not found: {template}")
 
-    for d in args.dirs:
+    for d in dirs:
         if not os.path.isdir(d):
             print(f"Skipping {d}: not a directory")
             continue
@@ -314,17 +303,18 @@ def main():
         os.makedirs(directives_dir, exist_ok=True)
         out_adoc = os.path.join(directives_dir, f"{basename}.adoc")
 
-        if args.skip_existing and os.path.exists(out_adoc):
+        if skip_existing and os.path.exists(out_adoc):
             print(f"Skipping {d}: {out_adoc} exists")
             continue
 
         # 1) detect stack extension and path
-        stackext = find_stack_ext(d_abs, basename, override_ext=args.stackext)
-        if not stackext:
+        stackext_val = find_stack_ext(d_abs, basename, override_ext=stackext)
+        if not stackext_val:
             print(f"ERROR: could not detect a stack file for {basename} in {d_abs}; create {basename}.mrc or specify --stackext")
             continue
-        stackfile = os.path.join(d_abs, f"{basename}.{stackext}")
-        orig_stack = os.path.join(d_abs, f"{basename}_orig.{stackext}")
+        stackfile = os.path.join(d_abs, f"{basename}.{stackext_val}")
+        orig_stack = os.path.join(d_abs, f"{basename}_orig.{stackext_val}")
+        
         # 2) run header to extract pixel and rotation
         try:
             header_out = run_header_and_capture(stackfile)
@@ -352,9 +342,9 @@ def main():
         replacements = {
             KEY_NAME: basename,
             KEY_PIXEL: pixel_val,
-            KEY_GOLD: str(args.gold),
+            KEY_GOLD: str(gold),
             KEY_ROTATION: rotation_val,
-            KEY_STACKEXT: stackext,
+            KEY_STACKEXT: stackext_val,
             KEY_DATASETDIR: d_abs,
         }
 
@@ -367,7 +357,7 @@ def main():
             continue
 
         # 6) run etomo with the new directive (unless --no-run)
-        if args.no_run:
+        if no_run:
             continue
 
         try:
@@ -377,8 +367,7 @@ def main():
         except subprocess.CalledProcessError as e:
             print(f"etomo failed for {basename}: exit {e.returncode}")
         except FileNotFoundError:
-            print("ERROR: 'etomo' not found in PATH. Install IMOD or add etomo to PATH.")
-            raise SystemExit(2)
+            raise RuntimeError("ERROR: 'etomo' not found in PATH. Install IMOD or add etomo to PATH.")
     
         xf_path = os.path.join(d_abs, f"{basename}.xf")
         prexg_path = os.path.join(d_abs, f"{basename}.prexg")
@@ -394,7 +383,7 @@ def main():
         write_zero_tltxf(xf_path, tltxf_path)
 
         prexg_to_prexf(prexg_path, prexf_path)
-        if not args.do_not_run_comfiles:
+        if not do_not_run_comfiles:
             #eraser
             stack_name = os.path.split(stackfile)[1]
             if os.path.isfile(orig_stack):
@@ -403,19 +392,13 @@ def main():
                 print('Running eraser...')
                 subprocess.check_output('subm eraser.com', shell=True)
                 os.rename(stackfile, orig_stack)
-                os.rename('%s_fixed.%s' % (basename, stackext), stackfile)
+                os.rename('%s_fixed.%s' % (basename, stackext_val), stackfile)
             #prenewst
             subprocess.check_output('subm prenewst.com', shell=True)
             #newst
             print('Generating positioning tomo...')
-##            newstcom = IMOD_comfile(d_abs, 'newst.com', make_paths_absolute=False)
-##            newstcom.set_val('BinByFactor', args.tomo_binning)
-##            if 'SizeToOutputInXandY' in newstcom.dict.keys():
-##                del newstcom.dict['SizeToOutputInXandY']
-##            newstcom.write_comfile(d_abs)
-
             newstcom = IMOD_comfile(d_abs, 'newst.com', make_paths_absolute=False)
-            newstcom.set_val('BinByFactor', args.tomo_binning)
+            newstcom.set_val('BinByFactor', tomo_binning)
             # Check if key exists and delete safely using the new API
             if 'SizeToOutputInXandY' in newstcom:
                 newstcom.del_val('SizeToOutputInXandY')
@@ -423,26 +406,47 @@ def main():
             
             subprocess.check_output('subm newst.com', shell=True)
             #tilt
-##            tiltcom = IMOD_comfile(d_abs, 'tilt.com', make_paths_absolute=False)
-##            tiltcom.dict['IMAGEBINNED'] = args.tomo_binning
-##            tiltcom.dict['THICKNESS'] = args.tomo_thickness
-##            tiltcom.dict['OutputFile'] = basename + '_full_rec.mrc'
-##            del tiltcom.dict['XTILTFILE']
-##            tiltcom.write_comfile(d_abs)
-
             tiltcom = IMOD_comfile(d_abs, 'tilt.com', make_paths_absolute=False)
-            tiltcom.set_val('IMAGEBINNED', args.tomo_binning)
-            tiltcom.set_val('THICKNESS', args.tomo_thickness)
+            tiltcom.set_val('IMAGEBINNED', tomo_binning)
+            tiltcom.set_val('THICKNESS', tomo_thickness)
             tiltcom.set_val('OutputFile', basename + '_full_rec.mrc')
 
             if 'XTILTFILE' in tiltcom:
                 tiltcom.del_val('XTILTFILE')
 
             tiltcom.write_comfile(d_abs)
-            #tiltcom.ScaleShifts
             subprocess.check_output('subm tilt.com', shell=True)
 
         os.chdir(cwd)
+
+def main():
+    p = argparse.ArgumentParser(description="Generate per-dataset IMOD directives from header info and run etomo.")
+    p.add_argument("dirs", nargs="+", help="Dataset directories (basename must match tilt-series filename)")
+    p.add_argument("--template", "-t", required=True, help="Directive template (.adoc). You can use e.g. the default system templates found in [IMOD directory]/SystemTemplate/cryoSample.adoc ")
+    p.add_argument("--gold", type=float, default=10.0, help="Fiducial diameter to set as setupset.copyarg.gold (default: 10)")
+    p.add_argument("--stackext", help="Force stack extension (e.g. mrc) rather than auto-detect")
+    p.add_argument("--no-run", action="store_true", help="Only create directives; do not run etomo")
+    p.add_argument("--skip-existing", action="store_true", help="Skip dataset if directives/<basename>.adoc already exists")
+    p.add_argument("--tomo_binning",type=int, default=6)
+    p.add_argument("--tomo_thickness",type=int, default=3000)
+    p.add_argument("--do_not_run_comfiles", default=False, action='store_true')
+    args = p.parse_args()
+
+    try:
+        run_etomo_translation(
+            dirs=args.dirs,
+            template=args.template,
+            gold=args.gold,
+            stackext=args.stackext,
+            no_run=args.no_run,
+            skip_existing=args.skip_existing,
+            tomo_binning=args.tomo_binning,
+            tomo_thickness=args.tomo_thickness,
+            do_not_run_comfiles=args.do_not_run_comfiles
+        )
+    except Exception as e:
+        print(f"Execution Failed: {e}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
