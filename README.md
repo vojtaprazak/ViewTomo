@@ -12,7 +12,7 @@ If you are familiar with Python virtual environments and Git, you can get starte
 
 1. Install
 ```bash
-git clone [https://github.com/vojtaprazak/ViewTomo.git](https://github.com/vojtaprazak/ViewTomo.git)
+git clone https://github.com/vojtaprazak/ViewTomo.git
 cd ViewTomo
 python3 -m venv viewtomo_venv
 source viewtomo_venv/bin/activate
