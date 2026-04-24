@@ -206,8 +206,8 @@ class EtomoEngine(BaseAlignmentEngine):
         rec_bin = self.params['tomo_binning']
         
         # Original logic reintroduced
-        SizeOfPatchesXandY = 42 * patch_binning
-        patchtrack_border = 27 * patch_binning
+        SizeOfPatchesXandY = int((42 * patch_binning) / image_binned)
+        patchtrack_border = int((27 * patch_binning) / image_binned)
 
         overrides = {
             "setupset.copyarg.name": self.base_name,
