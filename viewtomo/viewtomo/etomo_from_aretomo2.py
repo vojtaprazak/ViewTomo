@@ -28,13 +28,17 @@ import subprocess
 from glob import glob
 import math
 
+# Robust import for iMOD_comfile: 
+# We explicitly avoid relative dots in the fallback to support softlinked scripts.
 try:
     from viewtomo.iMOD_comfile import IMOD_comfile
-except ImportError:
+except (ImportError, ModuleNotFoundError):
     try:
-        from .iMOD_comfile import IMOD_comfile
-    except ImportError:
         from iMOD_comfile import IMOD_comfile
+    except (ImportError, ModuleNotFoundError):
+        # Last resort fallback for specific environment edge cases
+        import iMOD_comfile
+        IMOD_comfile = iMOD_comfile.IMOD_comfile
 
 def _parse_linear_xf(path):
     """Return list of (a,b,c,d,tx,ty) for numeric lines in an xf-like file.

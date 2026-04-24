@@ -13,7 +13,9 @@ import shutil
 import subprocess
 from pathlib import Path
 
+# Robust imports: Support both installed package mode and loose script/softlink mode
 try:
+    # 1. Try standard package import
     from viewtomo.mask_ts_outliers import AutoMasker
     from viewtomo import etomo_from_aretomo2 as efa
     from viewtomo.iMOD_comfile import IMOD_comfile
@@ -21,27 +23,28 @@ try:
         resolve_template_path, calculate_thicknesses, run_cmd, 
         determine_output_size, append_or_replace_adoc_keys
     )
-except ImportError:
+except (ImportError, ModuleNotFoundError):
     try:
-        from .mask_ts_outliers import AutoMasker
-        from . import etomo_from_aretomo2 as efa
-        from .iMOD_comfile import IMOD_comfile
-        from .tomo_utils import (
+        # 2. Fallback for loose script execution or manual softlinks
+        # We use absolute imports here because Python adds the script's real 
+        # directory to sys.path automatically.
+        import mask_ts_outliers as mto
+        AutoMasker = mto.AutoMasker
+        import etomo_from_aretomo2 as efa
+        from iMOD_comfile import IMOD_comfile
+        from tomo_utils import (
             resolve_template_path, calculate_thicknesses, run_cmd, 
             determine_output_size, append_or_replace_adoc_keys
         )
-    except ImportError as e:
+    except (ImportError, ModuleNotFoundError) as e:
         print(f"CRITICAL ERROR: Missing local module. {e}")
         sys.exit(1)
 
 def check_dependencies(engine: str):
-    """
-    Verifies that all required external command-line tools are available in the system PATH.
-    """
+    """Verifies that all required external command-line tools are available in PATH."""
     deps = ['header', 'extracttilts', 'newstack', 'etomo', 'makecomfile', 'submfg']
     if engine == 'aretomo2':
         deps.append('AreTomo2')
-        
     missing = [cmd for cmd in deps if shutil.which(cmd) is None]
     if missing:
         raise RuntimeError(f"Missing required executables in PATH: {', '.join(missing)}")
@@ -58,18 +61,24 @@ class BaseAlignmentEngine:
         self.base_name = self.orig_mrc.stem
         self.linked_mrc = self.work_dir / f"{self.base_name}.mrc"
         self.masked_mrc = self.work_dir / f"{self.base_name}_masked.mrc"
+        self.unmasked_mrc = self.work_dir / f"{self.base_name}_unmasked.mrc"
 
     def setup_workspace(self):
         """Creates the output directory and symlinks the raw MRC to preserve the original."""
         self.work_dir.mkdir(exist_ok=True, parents=True)
+        if self.unmasked_mrc.exists() or self.unmasked_mrc.is_symlink():
+            self.unmasked_mrc.unlink()
+        self.unmasked_mrc.symlink_to(self.orig_mrc)
+        
+        # linked_mrc is what IMOD and etomo look for (defaults to unmasked)
         if self.linked_mrc.exists() or self.linked_mrc.is_symlink():
             self.linked_mrc.unlink()
-        self.linked_mrc.symlink_to(self.orig_mrc)
+        self.linked_mrc.symlink_to(self.unmasked_mrc)
 
     def _check_and_reorder_tilts(self):
         """Parses the MRC header for tilt angles and reorders the stack if unsorted."""
         print(">> Checking tilt angles...")
-        res = subprocess.run(["extracttilts", str(self.linked_mrc)], capture_output=True, text=True)
+        res = subprocess.run(["extracttilts", str(self.unmasked_mrc)], capture_output=True, text=True)
         tilts = []
         for line in res.stdout.splitlines():
             s_line = line.strip()
@@ -81,25 +90,23 @@ class BaseAlignmentEngine:
         
         if tilts != sorted(tilts):
             print(">> Stack is not sorted. Reordering initial tilt series...")
-            tmp_mrc = self.work_dir / f"{self.base_name}_tmp.mrc"
-            self.linked_mrc.rename(tmp_mrc)
-            run_cmd(["newstack", "-reo", "1", str(tmp_mrc), str(self.linked_mrc)], cwd=self.work_dir)
+            tmp_mrc = self.work_dir / f"{self.base_name}_unsorted.mrc"
+            self.unmasked_mrc.rename(tmp_mrc)
+            # Create a real, sorted MRC at the unmasked_mrc path
+            run_cmd(["newstack", "-reo", "1", str(tmp_mrc), str(self.unmasked_mrc)], cwd=self.work_dir)
             tmp_mrc.unlink()
         else:
             print(">> Stack is already sorted.")
 
     def mask_outliers(self):
-        """Executes the outlier masking and inpainting routine."""
+        """Executes the outlier masking routine and updates the symlink for alignment."""
         if self.params.get('skip_mask'):
             print(">> Bypassing Outlier Masking (--skip_mask enabled)...")
-            if self.masked_mrc.exists() or self.masked_mrc.is_symlink():
-                self.masked_mrc.unlink()
-            self.masked_mrc.symlink_to(self.linked_mrc)
             return
 
         print(">> Running Outlier Masking...")
         mask_args = argparse.Namespace(
-            input=str(self.linked_mrc),
+            input=str(self.unmasked_mrc),
             output=str(self.masked_mrc),
             binning=6,
             hist_binning=16,
@@ -113,6 +120,11 @@ class BaseAlignmentEngine:
             workers=self.params.get('workers', 8)
         )
         AutoMasker(mask_args)
+        
+        # Point the working symlink to the masked data for the alignment pass
+        if self.linked_mrc.exists() or self.linked_mrc.is_symlink():
+            self.linked_mrc.unlink()
+        self.linked_mrc.symlink_to(self.masked_mrc)
 
 class AreTomoEngine(BaseAlignmentEngine):
     """Alignment Engine utilizing AreTomo2 for GPU-accelerated markerless alignment."""
@@ -203,9 +215,9 @@ class EtomoEngine(BaseAlignmentEngine):
         
         unbinned_thick = self.params['final_thickness_px']
         patch_binning = self.params['aretomo_binning']
-        rec_bin = self.params['tomo_binning']
+        image_binned = self.params.get('imagebinned', 1)
         
-        # Original logic reintroduced
+        # Scaling based on imagebinned
         SizeOfPatchesXandY = int((42 * patch_binning) / image_binned)
         patchtrack_border = int((27 * patch_binning) / image_binned)
 
@@ -220,7 +232,7 @@ class EtomoEngine(BaseAlignmentEngine):
             "comparam.prenewst.newstack.BinByFactor": str(patch_binning),
             "runtime.Positioning.any.binByFactor": "8",
             "runtime.Positioning.any.thickness": str(unbinned_thick),
-            "runtime.AlignedStack.any.binByFactor": str(rec_bin),
+            "runtime.AlignedStack.any.binByFactor": str(self.params['tomo_binning']),
             "comparam.tilt.tilt.THICKNESS": str(unbinned_thick),
             "comparam.cryoposition.cryoposition.BinningToApply": "8"
         }
@@ -258,12 +270,11 @@ class EtomoEngine(BaseAlignmentEngine):
         self._update_com("align.com", "AxisZshift", update_additive("AxisZshift", add_z))
 
     def _final_reconstruction(self):
-        """Applies level offsets and performs the final back-projection step."""
+        """Points back to unmasked data and performs the final back-projection step."""
         print(">> Switching back to unmasked data for final reconstruction...")
-        self.linked_mrc.unlink()
-        self.linked_mrc.symlink_to(self.orig_mrc)
-        self.setup_workspace()
-        self._check_and_reorder_tilts()
+        if self.linked_mrc.exists() or self.linked_mrc.is_symlink():
+            self.linked_mrc.unlink()
+        self.linked_mrc.symlink_to(self.unmasked_mrc)
 
         edf_path = self.work_dir / f"{self.base_name}.edf"
         final_size = determine_output_size(str(self.linked_mrc), str(edf_path), self.params['tomo_binning'])
@@ -293,10 +304,10 @@ def main():
     parser.add_argument("--final_nm", type=float, default=300.0, help="Reconstruction thickness in nm, default 300")
     parser.add_argument("--aretomo_binning", type=int, default=4, help="Binning for alignment pass, default 4")
     parser.add_argument("--tomo_binning", type=int, default=4, help="Binning for final reconstruction, default 4")
-    parser.add_argument("--imagebinned", type=int, default=1, help="Pre-binning factor of the input images (scales patch tracking size), default 1.")
+    parser.add_argument("--imagebinned", type=int, default=1, help="Pre-binning factor of input images (scales patch tracking geometry), default 1.")
     parser.add_argument("--template", type=str, default="lamella.adoc", help="Path to IMOD system template (.adoc). Uses default 'lamella.adoc' in templates")
     parser.add_argument("--workers", type=int, default=8, help="Number of CPU workers for python masking, default 8")
-    parser.add_argument("--debug", action="store_true", help="Enable debug logging and plotting for the masking phase. Writes a useful histogram plot.")
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging and plotting for the masking phase.")
     parser.add_argument("--skip_mask", action="store_true", help="Completely bypass outlier masking phase")
     
     parser.add_argument("--mask_low_cut", type=float, default=0.05)
