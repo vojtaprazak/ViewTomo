@@ -138,7 +138,7 @@ class PhysicsModel:
                 raw_calc = dense_t[np.argmax(dense_y)]
                 if abs(raw_calc) < 25:
                     calculated_offset = raw_calc
-        except:
+        except Exception:
             pass
             
         if pretilt is not None:
@@ -194,7 +194,7 @@ class PhysicsModel:
             
             y_pred_full = model.predict(tilts.reshape(-1, 1))
             return y_pred_full, score, rel_error
-        except:
+        except Exception:
             return np.full_like(tilts, np.nan), -1.0, 1.0
 
     @staticmethod
@@ -245,7 +245,7 @@ class PhysicsModel:
                 y_pred_log[valid_full] = model.predict(X_full)
             
             return np.exp(y_pred_log), score, rel_error
-        except:
+        except Exception:
             return np.full_like(tilts, np.nan), -1.0, 1.0
 
     @staticmethod
