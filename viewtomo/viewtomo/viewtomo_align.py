@@ -204,16 +204,19 @@ class EtomoEngine(BaseAlignmentEngine):
         unbinned_thick = self.params['final_thickness_px']
         patch_binning = self.params['aretomo_binning']
         rec_bin = self.params['tomo_binning']
-        image_binned = self.params.get('imagebinned', 1)
-        scaled_patch_size = int(680 / image_binned)
-        patchtrack_border = int((27 * patch_binning) / image_binned)
         
+        # Original logic reintroduced
+        SizeOfPatchesXandY = 42 * patch_binning
+        patchtrack_border = 27 * patch_binning
+
         overrides = {
             "setupset.copyarg.name": self.base_name,
             "setupset.datasetDirectory": str(self.work_dir),
             "setupset.copyarg.stackext": "mrc",
+            "setupset.scanHeader": "1",
             "setupset.copyarg.pixel": str(self.params['apix_angstroms'] / 10.0),
-            "comparam.xcorr_pt.tiltxcorr.SizeOfPatchesXandY": f"{scaled_patch_size},{scaled_patch_size}",
+            "comparam.xcorr_pt.tiltxcorr.SizeOfPatchesXandY": f"{SizeOfPatchesXandY},{SizeOfPatchesXandY}",
+            "comparam.xcorr_pt.tiltxcorr.OverlapOfPatchesXandY": "0.5,0.5",
             "comparam.prenewst.newstack.BinByFactor": str(patch_binning),
             "runtime.Positioning.any.binByFactor": "8",
             "runtime.Positioning.any.thickness": str(unbinned_thick),
@@ -291,15 +294,16 @@ def main():
     parser.add_argument("--aretomo_binning", type=int, default=4, help="Binning for alignment pass, default 4")
     parser.add_argument("--tomo_binning", type=int, default=4, help="Binning for final reconstruction, default 4")
     parser.add_argument("--imagebinned", type=int, default=1, help="Pre-binning factor of the input images (scales patch tracking size), default 1.")
-    parser.add_argument("--template", type=str, default="lamella.adoc", help="Path to IMOD system template (.adoc). Uses default 'krios.adoc' in templates")
+    parser.add_argument("--template", type=str, default="lamella.adoc", help="Path to IMOD system template (.adoc). Uses default 'lamella.adoc' in templates")
     parser.add_argument("--workers", type=int, default=8, help="Number of CPU workers for python masking, default 8")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging and plotting for the masking phase. Writes a useful histogram plot.")
     parser.add_argument("--skip_mask", action="store_true", help="Completely bypass outlier masking phase")
-    parser.add_argument("--mask_low_cut", type=float, default=0.05, help="Lower threshold cut factor. Default 0.05")
-    parser.add_argument("--mask_high_cut", type=float, default=0.05, help="Upper threshold cut factor. Default 0.05")
-    parser.add_argument("--mask_dilation", type=int, default=5, help="Mask boundary dilation in pixels. Default 5")
-    parser.add_argument("--wiggle", type=float, default=1.0, help="Masking relaxation factor for high tilts. Default 1.0")
-    parser.add_argument("--dust", type=int, default=20000, help="Smallest allowable mask feature size, default 20000.")
+    
+    parser.add_argument("--mask_low_cut", type=float, default=0.05)
+    parser.add_argument("--mask_high_cut", type=float, default=0.05)
+    parser.add_argument("--mask_dilation", type=int, default=5)
+    parser.add_argument("--wiggle", type=float, default=1.0)
+    parser.add_argument("--dust", type=int, default=20000)
 
     args = parser.parse_args()
     try:
