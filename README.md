@@ -24,7 +24,7 @@ pip install -e .
 
 Run the pipeline on a single tilt series (uses AreTomo2 by default):
 ```bash
-viewtomo_align.py ts01.mrc
+viewtomo_align ts01.mrc
 ```
 
 Or process an entire folder of tilt series automatically:
@@ -34,7 +34,7 @@ example/
 └── ts02.mrc
 ```
 ```bash
-viewtomo_align.py ts*.mrc
+viewtomo_align ts*.mrc
 ```
 This creates
 ```
@@ -95,7 +95,7 @@ pip install -e .
 
 ## Step 4: Run the Script
 
-As long as your virtual environment is active, the viewtomo_align.py command is now available anywhere on your system.
+As long as your virtual environment is active, the viewtomo_align command is now available anywhere on your system.
 
 Navigate to the folder containing your data
 ```bash
@@ -103,7 +103,7 @@ cd /path/to/your/mrc/files/
 ```
 Run the alignment script
 ```bash
-viewtomo_align.py my_tilt_series.mrc
+viewtomo_align my_tilt_series.mrc
 ```
 
 
@@ -153,7 +153,7 @@ If the automated masking is too harsh or too gentle, you can tune it:
 
 Example of an advanced run:
 
-viewtomo_align.py *.mrc --engine imod --tomo_binning 8 --mask_low_cut 0.02 --debug
+viewtomo_align *.mrc --engine imod --tomo_binning 8 --mask_low_cut 0.02 --debug
 
 # Future developments
 One of the reasons the imod pipeline performs worse is because viewtomo_align currently does not remove patches overlapping with masked areas. To implement this, I want to make use Daven Vasishtan's incredible TEMPy/pex code rather than doing a quick and dirty bespoke solution here.

@@ -441,7 +441,7 @@ class PhysicsModel:
                     high_thresholds = anchor_val * attenuation_profile
                 else:
                     logger.info("   [Fallback] Vacuum fit poor. Using sample-relative upper threshold.")
-                    high_thresholds = samp_final * (1.0 + abs(base_cut_high))
+                    high_thresholds = np.full_like(tilts, np.inf) 
 
                 # Apply secant-based relaxation via wiggle factor at high tilts
                 rads = np.radians(tilts - final_offset)
