@@ -155,6 +155,12 @@ class AreTomoEngine(BaseAlignmentEngine):
             "-OutImod", "1"
         ]
         run_cmd(cmd, cwd=self.work_dir)
+
+        # Switch the main working symlink back to unmasked data for final reconstruction/IMOD commands
+        if self.linked_mrc.exists() or self.linked_mrc.is_symlink():
+            self.linked_mrc.unlink()
+        self.linked_mrc.symlink_to(self.unmasked_mrc)
+        
         self.call_etomo_from_aretomo2()
 
     def call_etomo_from_aretomo2(self):
