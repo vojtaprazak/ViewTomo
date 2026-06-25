@@ -74,8 +74,8 @@ Expected Output: The pipeline will do the following tasks automatically:
 * Run the Etomo pipeline automatically, finishing by generating the _full_rec.mrc positioning tomogram.
 
 Expected runtime:
-~ 1 min for 4x test dataset (Aretomo2)
-~ 6 min for 1x data (Aretomo2)
+* ~ 1 min for 4x test dataset (Aretomo2)
+* ~ 6 min for 1x data (Aretomo2)
 
 # 🐢 Detailed Guide
 
@@ -186,3 +186,6 @@ viewtomo_align *.mrc --engine imod --tomo_binning 8 --mask_low_cut 0.02 --debug
 
 # Future developments
 One of the reasons the imod pipeline performs worse is because viewtomo_align currently does not remove patches overlapping with masked areas. To implement this, I want to make use Daven Vasishtan's incredible TEMPy/pex code rather than doing a quick and dirty bespoke solution here.
+
+📄 License
+Distributed under the open-source GNU General Public License v3.0 (GPL-3.0).
