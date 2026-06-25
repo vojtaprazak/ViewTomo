@@ -152,7 +152,7 @@ Crucial Feature: Because viewtomo builds a standard IMOD project in the backgrou
 
 
 Expected runtime:
-* ~ 1 min for 4x test dataset (Aretomo2)
+* ~ 2 min for 4x test dataset (Aretomo2)
 * ~ 6 min for 1x data (Aretomo2)
 
   
