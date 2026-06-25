@@ -72,18 +72,6 @@ example/
 
 ```
 
-Expected Output & Runtimes
-Expected Output: The pipeline will do the following tasks automatically:
-* Reorder the raw stack based on tilt angles present in the header.
-* Generate a mask based on histogram matching three classes of values: vacuum, sample and dark areas. Apply mask.
-* Run aretomo2 or Etomo patch tracking
-* Convert aretomo2 to an Etomo project
-* Run the Etomo pipeline automatically, finishing by generating the _full_rec.mrc positioning tomogram.
-
-Expected runtime:
-* ~ 1 min for 4x test dataset (Aretomo2)
-* ~ 6 min for 1x data (Aretomo2)
-
 # 🐢 Detailed Guide
 
 If you are new to using GitHub, Python packages, or the command line, follow these steps.
@@ -162,6 +150,12 @@ Tomogram Reconstruction: Calculates positioning, pitch, and generates the final 
 
 Crucial Feature: Because viewtomo builds a standard IMOD project in the background, you can always open the resulting .edf file in the Etomo GUI. If you are unhappy with the automated reconstruction, simply open your_dataset.edf in Etomo and modify, re-align, or re-reconstruct any part of it exactly as you would normally!
 
+
+Expected runtime:
+* ~ 1 min for 4x test dataset (Aretomo2)
+* ~ 6 min for 1x data (Aretomo2)
+
+  
 
 # ⚙️ Advanced Usage & Parameters
 
