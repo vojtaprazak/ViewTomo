@@ -5,6 +5,14 @@ viewtomo is a Python-based pipeline designed to streamline the processing of "vi
 📖 Read our preprint on bioRxiv:
 https://www.biorxiv.org/content/10.64898/2026.04.21.719727v1
 
+📋 System Requirements & Dependencies
+Operating Systems: Validated and tested on Red Hat Enterprise Linux 9 (RHEL9), Cygwin, and Windows Subsystem for Linux 2 (WSL2). 
+Python Version: Python 3.9.
+Core Software Dependencies:
+  * IMOD / Etomo (Version 5.2 tested)
+  * AreTomo2 (Version 1.1.3 tested; optional if running with classical IMOD)
+  * Hardware Requirements: Inherits all hardware and library dependencies directly from AreTomo2 (requires an NVIDIA GPU with appropriate CUDA runtime capability for the default execution engine). If non-GPU hardware is used, the pipeline can fall back to CPU patch-tracking via IMOD. 
+
 # 🚀 Quickstart (For the Impatient)
 ### A detailed guide can be found below
 
@@ -22,10 +30,19 @@ pip install -e .
 
 2. Basic Usage
 
+To verify the installation and baseline functionality, a lightweight sample dataset is included directly within the repository.
+Demo Data Path: viewtomo/demo_dataset/
+Contents: A 4× binned raw view tilt-series stack (.mrc). Please note that viewtomo_align parameters were optimised for unbinned data. This is intended purely for testing basic functionality.
+
 Run the pipeline on a single tilt series (uses AreTomo2 by default):
 ```bash
 viewtomo_align ts01.mrc
 ```
+Note: 
+```bash
+--debug
+```
+is recommended, this generates a .png plot of the histogram matching process.
 
 Or process an entire folder of tilt series automatically:
 ```
@@ -47,6 +64,18 @@ example/
 └── ts02.mrc
 
 ```
+
+Expected Output & Runtimes
+Expected Output: The pipeline will do the following tasks automatically:
+* Reorder the raw stack based on tilt angles present in the header.
+* Generate a mask based on histogram matching three classes of values: vacuum, sample and dark areas. Apply mask.
+* Run aretomo2 or Etomo patch tracking
+* Convert aretomo2 to an Etomo project
+* Run the Etomo pipeline automatically, finishing by generating the _full_rec.mrc positioning tomogram.
+
+Expected runtime:
+~ 1 min for 4x test dataset (Aretomo2)
+~ 6 min for 1x data (Aretomo2)
 
 # 🐢 Detailed Guide
 
