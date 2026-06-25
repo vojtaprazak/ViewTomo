@@ -187,5 +187,6 @@ viewtomo_align *.mrc --engine imod --tomo_binning 8 --mask_low_cut 0.02 --debug
 # Future developments
 One of the reasons the imod pipeline performs worse is because viewtomo_align currently does not remove patches overlapping with masked areas. To implement this, I want to make use Daven Vasishtan's incredible TEMPy/pex code rather than doing a quick and dirty bespoke solution here.
 
-📄 License
+📄 License:
+
 Distributed under the open-source GNU General Public License v3.0 (GPL-3.0).
