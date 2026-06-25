@@ -38,7 +38,14 @@ Run the pipeline on a single tilt series (uses AreTomo2 by default):
 ```bash
 viewtomo_align ts01.mrc
 ```
-Note: 
+
+Note 1:
+When using binnned data, including the 4x demo dataset, make sure to use --imagebinned flag, e.g.:
+```bash
+--imagebinned 4
+```
+
+Note 2: 
 ```bash
 --debug
 ```
@@ -133,6 +140,11 @@ cd /path/to/your/mrc/files/
 Run the alignment script
 ```bash
 viewtomo_align my_tilt_series.mrc
+```
+Note:
+When using binnned data, including the 4x demo dataset, make sure to use --imagebinned flag, e.g.:
+```bash
+--imagebinned 4
 ```
 
 
