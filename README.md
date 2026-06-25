@@ -34,7 +34,7 @@ To verify the installation and baseline functionality, a lightweight sample data
 Demo Data Path: viewtomo/demo_dataset/
 Contents: A 4× binned raw view tilt-series stack (.mrc). Please note that viewtomo_align parameters were optimised for unbinned data. This is intended purely for testing basic functionality.
 
-Run the pipeline on a single tilt series (uses AreTomo2 by default):
+Run the pipeline on a single tilt series (uses AreTomo2 by default, use --engine imod to switch to IMOD only):
 ```bash
 viewtomo_align ts01.mrc
 ```
