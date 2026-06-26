@@ -366,6 +366,7 @@ def run_etomo_translation(dirs, template, gold=10.0, stackext=None, no_run=False
             print(f"etomo setup completed for {basename}")
         except subprocess.CalledProcessError as e:
             print(f"etomo failed for {basename}: exit {e.returncode}")
+            raise
         except FileNotFoundError:
             raise RuntimeError("ERROR: 'etomo' not found in PATH. Install IMOD or add etomo to PATH.")
     

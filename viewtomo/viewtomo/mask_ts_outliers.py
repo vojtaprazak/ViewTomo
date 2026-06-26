@@ -545,6 +545,7 @@ class ImageProcessor:
         combined_padded = np.pad(combined, pad_width=pad_sz, mode='edge')
         
         processed = nd.binary_closing(combined_padded, structure=struct, iterations=5)
+        processed = nd.binary_fill_holes(processed, structure=struct)
         processed = nd.binary_dilation(processed, structure=struct, iterations=dilation)
         processed = nd.binary_opening(processed, structure=struct, iterations=2)
         
@@ -633,13 +634,18 @@ class AutoMasker:
             self.header_template = mrc.header.copy()
             self.ext_header = mrc.extended_header.copy() if mrc.extended_header is not None else None
 
-        self.binned_data = self.data[:, ::args.binning, ::args.binning]
+        self.binned_data = PhysicsModel.bin_ndarray(self.data, binning=args.binning)
         self.masks = np.zeros_like(self.binned_data, dtype=bool)
         
         self.logger.info(f"Data loaded in {time.time()-t0:.2f}s. Shape: {self.data.shape}, Binned: {self.binned_data.shape}")
         
         h_factor = args.high_cut_factor if getattr(args, 'high_cut_factor', None) is not None else getattr(args, 'cut_factor', 0.25)
-        
+
+        # Scale the histogram calculation binning down by the input pre-binning factor
+        image_binned = getattr(args, 'imagebinned', 1)
+        adj_hist_binning = max(1, getattr(args, 'hist_binning', 16) // image_binned)
+
+
         self.low_thresholds, self.high_thresholds, success = PhysicsModel.calculate_thresholds(
             self.logger,
             self.data, 
@@ -647,7 +653,7 @@ class AutoMasker:
             cut_factor_low=getattr(args, 'cut_factor', 0.25),
             cut_factor_high=h_factor,
             wiggle=getattr(args, 'wiggle', 1.0),
-            binning=getattr(args, 'hist_binning', 16),
+            binning=adj_hist_binning,
             pretilt=getattr(args, 'pretilt', None),
             debug=args.debug,
             debug_path=self.debug_png
@@ -656,7 +662,10 @@ class AutoMasker:
         if not success:
             self.logger.warning("Physics fit unreliable. Reverting to robust statistical thresholding.")
 
-        dust_area_thresh = max(1, int(args.dust / (args.binning**2)))
+        image_binned = getattr(args, 'imagebinned', 1)
+        total_mask_binning = args.binning * image_binned
+        dust_area_thresh = max(1, int(args.dust / (total_mask_binning**2)))
+        
         workers = self.get_dynamic_workers()
         self.logger.info(f"Generating masks ({workers} workers)...")
 
@@ -725,56 +734,72 @@ class AutoMasker:
         return final_workers
 
     def save_and_exit(self):
-        mask_out = self.args.output.replace('.mrc', '_mask.mrc')
-        self.logger.info(f"Saving binary mask to {mask_out}...")
-        with mrcfile.new(mask_out, overwrite=True) as mrc:
-            mrc.set_data(self.masks.astype(np.int16))
-            vs = self.voxel_size
-            mrc.voxel_size = (vs.x * self.args.binning, vs.y * self.args.binning, vs.z)
-            if self.ext_header is not None: mrc.set_extended_header(self.ext_header)
-
-        if not self.args.trial:
-            num_slices = self.data.shape[0]
-            self.logger.info(f"Homogenizing and saving full-res stack to {self.args.output}...")
-            
-            out_data = np.zeros_like(self.data)
-            workers = self.get_dynamic_workers()
-            
-            t2 = time.time()
-            with ProcessPoolExecutor(max_workers=workers) as executor:
-                futures = {
-                    executor.submit(_worker_inpaint, (i, self.data[i], self.masks[i], self.args.binning, getattr(self.args, 'dilation', 6), getattr(self.args, 'softness', 30.0))): i 
-                    for i in range(num_slices)
-                }
-                completed = 0
-                for future in as_completed(futures):
-                    idx, processed_slice = future.result() 
-                    out_data[idx] = processed_slice
-                    completed += 1
-                    sys.stdout.write(f"\r  Progress: {completed}/{num_slices} slices ({(completed/num_slices)*100:.1f}%)")
-                    sys.stdout.flush()
-            
-            print("\nWriting MMap to disk...")
-            with mrcfile.new(self.args.output, overwrite=True) as mrc:
-                mrc.set_data(out_data)
-                for f in self.header_template.dtype.names: mrc.header[f] = self.header_template[f]
-                mrc.voxel_size = self.voxel_size
+            mask_out = self.args.output.replace('.mrc', '_mask.mrc')
+            self.logger.info(f"Saving binary mask to {mask_out}...")
+            with mrcfile.new(mask_out, overwrite=True) as mrc:
+                mrc.set_data(self.masks.astype(np.int16))
+                vs = self.voxel_size
+                mrc.voxel_size = (vs.x * self.args.binning, vs.y * self.args.binning, vs.z)
                 if self.ext_header is not None: mrc.set_extended_header(self.ext_header)
+    
+            if not self.args.trial:
+                num_slices = self.data.shape[0]
+                self.logger.info(f"Homogenizing and saving full-res stack to {self.args.output}...")
                 
-            self.logger.info(f"Inpainting completed in {time.time()-t2:.2f}s.")
-            
-        self.saved = True
-        self.logger.info("AutoMasker finished successfully.\n")
+                out_data = np.zeros_like(self.data)
+                workers = self.get_dynamic_workers()
+                
+                
+                # Safe softness resolution
+                softness_arg = getattr(self.args, 'softness', None)
+                image_binned = getattr(self.args, 'imagebinned', 1)
+                # Anchor to the absolute physical baseline of 30.0 pixels and scale by image grid size
+                softness_val = softness_arg if softness_arg is not None else (30.0 / image_binned)            
+                
+                t2 = time.time()
+                with ProcessPoolExecutor(max_workers=workers) as executor:
+                    futures = {
+                        executor.submit(_worker_inpaint, (
+                            i, 
+                            self.data[i], 
+                            self.masks[i], 
+                            self.args.binning, 
+                            getattr(self.args, 'dilation', 6), 
+                            softness_val
+                        )): i 
+                        for i in range(num_slices)
+                    }
+                    completed = 0
+                    for future in as_completed(futures):
+                        idx, processed_slice = future.result() 
+                        out_data[idx] = processed_slice
+                        completed += 1
+                        sys.stdout.write(f"\r  Progress: {completed}/{num_slices} slices ({(completed/num_slices)*100:.1f}%)")
+                        sys.stdout.flush()
+                
+                print("\nWriting MMap to disk...")
+                with mrcfile.new(self.args.output, overwrite=True) as mrc:
+                    mrc.set_data(out_data)
+                    for f in self.header_template.dtype.names: mrc.header[f] = self.header_template[f]
+                    mrc.voxel_size = self.voxel_size
+                    if self.ext_header is not None: mrc.set_extended_header(self.ext_header)
+                    
+                self.logger.info(f"Inpainting completed in {time.time()-t2:.2f}s.")
+                
+            self.saved = True
+            self.logger.info("AutoMasker finished successfully.\n")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Physics-based outlier masking and inpainting.")
     parser.add_argument("input", help="Input MRC stack")
     parser.add_argument("output", help="Output homogenized filename")
     parser.add_argument("--binning", type=int, default=6, help="Binning factor for Mask Generation")
+    parser.add_argument("--imagebinned", type=int, default=1, help="Pre-binning factor of input images")
     parser.add_argument("--hist_binning", type=int, default=16, help="Binning factor for Histogram Stats. Default 16")
     parser.add_argument("--trial", action='store_true', help='Save mask only', default=False)
     parser.add_argument("--dilation", type=int, default=6, help="Mask dilation iterations. Default 6.")
-    parser.add_argument("--softness", type=float, default=30.0, help="Soft edge gradient length (full-res px)")
+    parser.add_argument("--softness", type=float, default=None, help="Soft edge gradient length. Defaults to 5.0 * binning if None.")
     
     # Threshold Controls
     parser.add_argument("--cut_factor", type=float, default=0.05, help="Lower (Obscured) threshold factor (0.0-1.0)")
