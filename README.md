@@ -32,9 +32,9 @@ pip install -e .
 
 To verify the installation and baseline functionality, a lightweight sample dataset is included directly within the repository.
 Demo Data Path: viewtomo/demo_dataset/
-Contents: A 4× binned raw view tilt-series stack (.mrc). Please note that viewtomo_align parameters were optimised for unbinned data. This is intended purely for testing basic functionality.
+Contents: A 4× binned raw view tilt-series stack (.mrc). Please note that viewtomo_align parameters were optimised for unbinned data. This is intended purely for testing basic functionality, the results are expected to underwhelming with the 4x binned data. 
 
-Run the pipeline on a single tilt series (uses AreTomo2 by default):
+Run the pipeline on a single tilt series (uses AreTomo2 by default, use --engine imod to switch to IMOD only):
 ```bash
 viewtomo_align ts01.mrc
 ```
@@ -152,7 +152,6 @@ Crucial Feature: Because viewtomo builds a standard IMOD project in the backgrou
 
 
 Expected runtime:
-* ~ 1 min for 4x test dataset (Aretomo2)
 * ~ 6 min for 1x data (Aretomo2)
 
   
