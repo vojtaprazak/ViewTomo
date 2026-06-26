@@ -279,8 +279,10 @@ class EtomoEngine(BaseAlignmentEngine):
         patch_binning = self.params['eff_aretomo_binning']
         image_binned = self.params.get('imagebinned', 1)
         
-        actual_absolute_binning = patch_binning * image_binned
-        
+        # Cap at the intended target binning: when image_binned > aretomo_binning, eff_aretomo
+        # clamps to 1 but the product would overshoot, producing patches too large for the image.
+        actual_absolute_binning = min(patch_binning * image_binned, self.params['aretomo_binning'])
+
         SizeOfPatchesXandY = int(42 * actual_absolute_binning)
         patchtrack_border = int(32 * actual_absolute_binning) # Base 32 gives exactly 128 at absolute bin 4
         
