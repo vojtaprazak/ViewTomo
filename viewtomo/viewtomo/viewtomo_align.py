@@ -169,8 +169,10 @@ class AreTomoEngine(BaseAlignmentEngine):
 
         # Switch the main working symlink back to unmasked data for final reconstruction/IMOD commands
         self._safe_relink(self.linked_mrc, self.unmasked_mrc)
-        
+
         self.call_etomo_from_aretomo2()
+        self._run_cryopositioning_aretomo()
+        print(f"--- Success! Pipeline completed for {self.base_name} ---")
 
     def call_etomo_from_aretomo2(self):
             """Invokes the translation module to build IMOD-compatible alignments."""
@@ -202,8 +204,39 @@ class AreTomoEngine(BaseAlignmentEngine):
                 os.chdir(original_cwd)  # Always restore original context even if things crash
 
                 
-            print(f"--- Success! Pipeline completed for {self.base_name} ---")
-        
+            print(">> etomo_from_aretomo2 translation complete.")
+
+    def _run_cryopositioning_aretomo(self):
+        """Runs cryopositioning after the initial AreTomo reconstruction and applies
+        pitch correction by modifying the .tlt file and re-running tilt.com."""
+        print(">> Running Cryopositioning...")
+        adoc_path = self.work_dir / "directives" / f"{self.base_name}.adoc"
+        if not adoc_path.exists():
+            print(">> No directive adoc found; skipping cryopositioning.")
+            return
+
+        adoc_rel = Path("directives") / f"{self.base_name}.adoc"
+        run_cmd(["makecomfile", "-root", self.base_name, "-thickness", "1200",
+                 "-change", str(adoc_rel), "cryoposition.com"], cwd=self.work_dir)
+        run_cmd(["submfg", "cryoposition.com"], cwd=self.work_dir)
+        run_cmd(["submfg", "tomopitch.com"], cwd=self.work_dir)
+
+        pitch_log = (self.work_dir / "tomopitch.log").read_text()
+        add_angle = float(
+            re.search(r"to make level, add\s+([-\d\.]+)", pitch_log).group(1)
+            if "to make level" in pitch_log else "0"
+        )
+
+        if add_angle == 0:
+            print(">> No pitch correction needed.")
+            return
+
+        tlt_path = self.work_dir / f"{self.base_name}.tlt"
+        lines = tlt_path.read_text().splitlines()
+        corrected = [f"   {float(l.strip()) + add_angle:.2f}" for l in lines if l.strip()]
+        tlt_path.write_text('\n'.join(corrected) + '\n')
+        print(f">> Applied pitch correction of {add_angle:.2f} deg to .tlt; re-running tilt...")
+        run_cmd(["submfg", "tilt.com"], cwd=self.work_dir)
 
 
 class EtomoEngine(BaseAlignmentEngine):
@@ -299,6 +332,7 @@ class EtomoEngine(BaseAlignmentEngine):
             
         self._update_com("align.com", "AngleOffset", update_additive("AngleOffset", add_angle))
         self._update_com("align.com", "AxisZshift", update_additive("AxisZshift", add_z))
+        run_cmd(["submfg", "align.com"], cwd=self.work_dir)
 
     def _final_reconstruction(self):
         """Points back to unmasked data and performs the final back-projection step."""
