@@ -70,6 +70,16 @@ class BaseAlignmentEngine:
             link_path.unlink()
         link_path.symlink_to(target_path)        
 
+    def _postprocess(self):
+        """Runs clip rotx on the final reconstruction and removes IMOD tilde backup files."""
+        full_rec = self.work_dir / f"{self.base_name}_full_rec.mrc"
+        rec = self.work_dir / f"{self.base_name}_rec.mrc"
+        if full_rec.exists():
+            print(">> Running clip rotx for standard orientation...")
+            run_cmd(["clip", "rotx", str(full_rec), str(rec)], cwd=self.work_dir)
+        for backup in self.work_dir.glob("*~"):
+            backup.unlink()
+
     def setup_workspace(self):
         """Creates the output directory and symlinks the raw MRC to preserve the original."""
         self.work_dir.mkdir(exist_ok=True, parents=True)
@@ -172,6 +182,7 @@ class AreTomoEngine(BaseAlignmentEngine):
 
         self.call_etomo_from_aretomo2()
         self._run_cryopositioning_aretomo()
+        self._postprocess()
         print(f"--- Success! Pipeline completed for {self.base_name} ---")
 
     def call_etomo_from_aretomo2(self):
@@ -215,11 +226,19 @@ class AreTomoEngine(BaseAlignmentEngine):
             print(">> No directive adoc found; skipping cryopositioning.")
             return
 
+        image_binned = self.params.get('imagebinned', 1)
+        patch_binning = self.params['eff_aretomo_binning']
+        cryoposition_thickness = max(50, 1200 * self.params['aretomo_binning'] // (patch_binning * image_binned))
+
         adoc_rel = Path("directives") / f"{self.base_name}.adoc"
-        run_cmd(["makecomfile", "-root", self.base_name, "-thickness", "1200",
+        run_cmd(["makecomfile", "-root", self.base_name, "-thickness", str(cryoposition_thickness),
                  "-change", str(adoc_rel), "cryoposition.com"], cwd=self.work_dir)
-        run_cmd(["submfg", "cryoposition.com"], cwd=self.work_dir)
-        run_cmd(["submfg", "tomopitch.com"], cwd=self.work_dir)
+        try:
+            run_cmd(["submfg", "cryoposition.com"], cwd=self.work_dir)
+            run_cmd(["submfg", "tomopitch.com"], cwd=self.work_dir)
+        except RuntimeError as e:
+            print(f">> Cryopositioning failed ({e}); skipping pitch correction.")
+            return
 
         pitch_log = (self.work_dir / "tomopitch.log").read_text()
         add_angle = float(
@@ -251,6 +270,7 @@ class EtomoEngine(BaseAlignmentEngine):
         self._run_etomo_batch()
         self._run_cryopositioning()
         self._final_reconstruction()
+        self._postprocess()
         print(f"--- Success! IMOD pipeline completed. ---")
 
     def _update_com(self, file_name, param, value):
@@ -317,11 +337,19 @@ class EtomoEngine(BaseAlignmentEngine):
         print(">> Running Cryopositioning...")
         adoc_path = self.work_dir / f"{self.base_name}.adoc"
 
-        run_cmd(["makecomfile", "-root", self.base_name, "-thickness", str(1200), 
+        image_binned = self.params.get('imagebinned', 1)
+        patch_binning = self.params['eff_aretomo_binning']
+        cryoposition_thickness = max(50, 1200 * self.params['aretomo_binning'] // (patch_binning * image_binned))
+
+        run_cmd(["makecomfile", "-root", self.base_name, "-thickness", str(cryoposition_thickness),
                  "-change", adoc_path.name, "cryoposition.com"], cwd=self.work_dir)
-        run_cmd(["submfg", "cryoposition.com"], cwd=self.work_dir)
-        run_cmd(["submfg", "tomopitch.com"], cwd=self.work_dir)
-        
+        try:
+            run_cmd(["submfg", "cryoposition.com"], cwd=self.work_dir)
+            run_cmd(["submfg", "tomopitch.com"], cwd=self.work_dir)
+        except RuntimeError as e:
+            print(f">> Cryopositioning failed ({e}); skipping pitch correction.")
+            return
+
         pitch_log = (self.work_dir / "tomopitch.log").read_text()
         add_angle = re.search(r"to make level, add\s+([-\d\.]+)", pitch_log).group(1) if "to make level" in pitch_log else "0"
         add_z = re.search(r"added Z shift of\s+([-\d\.]+)", pitch_log).group(1) if "added Z shift" in pitch_log else "0"
