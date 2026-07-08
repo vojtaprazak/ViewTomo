@@ -190,8 +190,25 @@ Example of an advanced run:
 viewtomo_align *.mrc --engine imod --tomo_binning 8 --mask_low_cut 0.02 --debug
 
 # Future developments
-One of the reasons the imod pipeline performs worse is because viewtomo_align currently does not remove patches overlapping with masked areas. To implement this, I want to make use Daven Vasishtan's incredible TEMPy/pex code rather than doing a quick and dirty bespoke solution here.
+Future planned improvements include using Daven Vasishtan's incredible [TEMPy/pex](https://github.com/vojtaprazak/pex) code for further model manipulation and patch overlap handling.
 
 📄 License:
 
 Distributed under the open-source GNU General Public License v3.0 (GPL-3.0).
+
+---
+
+# 📋 Changelog
+
+## v0.2.0 (2026-07-08)
+
+### New: Mask-based fiducial filtering for IMOD patch tracking
+The IMOD engine now automatically prunes the patch-tracking fiducial model before alignment, using the same mask generated during the outlier-masking step.
+- Points where >30% of the patch area is masked are removed; contours losing ≥50% of points are dropped entirely.
+- Implemented via a bundled minimal IMOD `.mod` reader/writer (`imod_model.py`); if TEMPy's `PEETModelParser` is importable it is used instead.
+
+### Improved: AreTomo2 not found → graceful IMOD fallback
+Running without AreTomo2 in PATH now prints a prominent warning and continues with `--engine imod`, rather than exiting immediately.
+
+## v0.1.0 (initial release)
+Automated Cryo-ET alignment and reconstruction pipeline supporting AreTomo2 (GPU, markerless) and IMOD/Etomo (CPU, patch-tracking) backends, with automated deterministic histogram-based lamella masking.

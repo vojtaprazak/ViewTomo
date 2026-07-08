@@ -13,6 +13,8 @@ import shutil
 import subprocess
 import traceback
 from pathlib import Path
+import mrcfile
+import numpy as np
 
 # Robust imports: Support both installed package mode and loose script/softlink mode
 try:
@@ -20,35 +22,53 @@ try:
     from viewtomo.mask_ts_outliers import AutoMasker
     from viewtomo import etomo_from_aretomo2 as efa
     from viewtomo.iMOD_comfile import IMOD_comfile
+    from viewtomo.imod_model import ImodModel
     from viewtomo.tomo_utils import (
-        resolve_template_path, calculate_thicknesses, run_cmd, 
+        resolve_template_path, calculate_thicknesses, run_cmd,
         determine_output_size, append_or_replace_adoc_keys
     )
 except (ImportError, ModuleNotFoundError):
     try:
         # 2. Fallback for loose script execution or manual softlinks
-        # We use absolute imports here because Python adds the script's real 
+        # We use absolute imports here because Python adds the script's real
         # directory to sys.path automatically.
         import mask_ts_outliers as mto
         AutoMasker = mto.AutoMasker
         import etomo_from_aretomo2 as efa
         from iMOD_comfile import IMOD_comfile
+        from imod_model import ImodModel
         from tomo_utils import (
-            resolve_template_path, calculate_thicknesses, run_cmd, 
+            resolve_template_path, calculate_thicknesses, run_cmd,
             determine_output_size, append_or_replace_adoc_keys
         )
     except (ImportError, ModuleNotFoundError) as e:
         print(f"CRITICAL ERROR: Missing local module. {e}")
         sys.exit(1)
 
-def check_dependencies(engine: str):
-    """Verifies that all required external command-line tools are available in PATH."""
-    deps = ['header', 'extracttilts', 'newstack', 'etomo', 'makecomfile', 'submfg']
-    if engine == 'aretomo2':
-        deps.append('AreTomo2')
-    missing = [cmd for cmd in deps if shutil.which(cmd) is None]
-    if missing:
-        raise RuntimeError(f"Missing required executables in PATH: {', '.join(missing)}")
+def check_dependencies(engine: str) -> str:
+    """Verifies required executables are in PATH.
+
+    Returns the engine that will actually be used (may differ from the
+    requested engine if AreTomo2 is missing and we fall back to IMOD).
+    Raises RuntimeError if IMOD tools are missing.
+    """
+    imod_deps = ['header', 'extracttilts', 'newstack', 'etomo', 'makecomfile', 'submfg']
+    missing_imod = [cmd for cmd in imod_deps if shutil.which(cmd) is None]
+    if missing_imod:
+        raise RuntimeError(f"Missing required IMOD executables in PATH: {', '.join(missing_imod)}")
+
+    if engine == 'aretomo2' and shutil.which('AreTomo2') is None:
+        print(
+            "\n" + "!" * 70 + "\n"
+            "  WARNING: AreTomo2 executable not found in PATH.\n"
+            "  The requested engine (aretomo2) cannot be used.\n"
+            "  Falling back to IMOD patch-tracking (--engine imod).\n"
+            "  To suppress this warning, pass --engine imod explicitly.\n"
+            + "!" * 70 + "\n"
+        )
+        return 'imod'
+
+    return engine
 
 class BaseAlignmentEngine:
     """
@@ -328,9 +348,73 @@ class EtomoEngine(BaseAlignmentEngine):
                  "-binning", str(patch_binning), "-change", adoc_path.name, "xcorr_pt.com"], cwd=self.work_dir)
         
         self._update_com("xcorr_pt.com", "BordersInXandY", f"{patchtrack_border},{patchtrack_border}")
-        
-        for com in ["xcorr.com", "prenewst.com", "xcorr_pt.com", "align.com"]:
+
+        for com in ["xcorr.com", "prenewst.com", "xcorr_pt.com"]:
             run_cmd(["submfg", com], cwd=self.work_dir)
+        self._filter_fiducials_by_mask()
+        run_cmd(["submfg", "align.com"], cwd=self.work_dir)
+
+    def _filter_fiducials_by_mask(self):
+        """Remove patch-tracking points that fall inside masked regions.
+
+        Points with >30% of their patch area masked are dropped.  Contours
+        that lose >=50% of their points are dropped entirely.  The filtered
+        model overwrites {base_name}.fid; the original is kept as .fid.unfiltered.
+        """
+        mask_path = self.work_dir / f"{self.base_name}_masked_mask.mrc"
+        fid_path  = self.work_dir / f"{self.base_name}.fid"
+        if not mask_path.exists() or not fid_path.exists():
+            return
+
+        with mrcfile.open(str(mask_path), mode='r') as mrc:
+            mask = mrc.data.astype(bool)   # shape (nz, ny, nx)
+        nz, ny, nx = mask.shape
+
+        image_binned   = self.params.get('imagebinned', 1)
+        eff_aretomo    = self.params['eff_aretomo_binning']
+        actual_abs_bin = min(eff_aretomo * image_binned, self.params['aretomo_binning'])
+        # Patch size in original-stack (= mask) pixel space
+        patch_px = int(42 * actual_abs_bin) * eff_aretomo
+        half = patch_px // 2
+
+        model = ImodModel(str(fid_path))
+
+        POINT_THR   = 0.30
+        CONTOUR_THR = 0.50
+
+        kept = dropped = 0
+        for obj in model.objs:
+            surviving = []
+            for ctr in obj['ctrs']:
+                pts = ctr['points']
+                keep = []
+                for pt in pts:
+                    xi = int(round(float(pt[0])))
+                    yi = int(round(float(pt[1])))
+                    zi = int(round(float(pt[2])))
+                    if zi < 0 or zi >= nz:
+                        keep.append(True)
+                        continue
+                    x0, x1 = max(0, xi - half), min(nx, xi + half)
+                    y0, y1 = max(0, yi - half), min(ny, yi + half)
+                    patch = mask[zi, y0:y1, x0:x1]
+                    frac  = patch.mean() if patch.size > 0 else 0.0
+                    keep.append(frac <= POINT_THR)
+                n_orig = len(pts)
+                n_keep = sum(keep)
+                if n_keep / n_orig >= CONTOUR_THR:
+                    ctr['points'] = pts[np.array(keep, dtype=bool)]
+                    surviving.append(ctr)
+                    kept += 1
+                else:
+                    dropped += 1
+            obj['ctrs'] = surviving
+
+        print(f">> Fiducial mask filter: {kept} contours kept, {dropped} dropped "
+              f"(patch {patch_px}px, point_thr=30%, contour_thr=50%)")
+
+        shutil.copy2(str(fid_path), str(fid_path) + '.unfiltered')
+        model.write_model(str(fid_path))
 
     def _run_cryopositioning(self):
         """Generates positioning tomograms and calculates pitch offsets to level the lamella."""
@@ -412,7 +496,7 @@ def main():
 
     args = parser.parse_args()
     try:
-        check_dependencies(args.engine)
+        args.engine = check_dependencies(args.engine)
     except RuntimeError as e:
         print(f"\n[CRITICAL ERROR] {e}")
         sys.exit(1)
