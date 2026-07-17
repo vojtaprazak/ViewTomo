@@ -308,6 +308,15 @@ class EtomoEngine(BaseAlignmentEngine):
             lines.append(f"{param} {value}")
         com_path.write_text("\n".join(lines) + "\n")
 
+    def _strip_com_line(self, file_name, param):
+        """Remove any line beginning with the given parameter from a .com file."""
+        com_path = self.work_dir / file_name
+        if not com_path.exists(): return
+        lines = com_path.read_text().splitlines()
+        filtered = [l for l in lines if not re.match(fr"^{param}\s+", l)]
+        if len(filtered) != len(lines):
+            com_path.write_text("\n".join(filtered) + "\n")
+
     def _run_etomo_batch(self):
         """Generates the required .adoc files and runs alignment subprocesses."""
         print(">> Generating IMOD Directives...")
@@ -344,7 +353,17 @@ class EtomoEngine(BaseAlignmentEngine):
         
         append_or_replace_adoc_keys(adoc_path, overrides)
         run_cmd(["etomo", "--headless", "--directive", adoc_path.name], cwd=self.work_dir)
-        run_cmd(["makecomfile", "-root", self.base_name, "-input", "xcorr.com", 
+
+        # etomo's setup step pre-populates ctfplotter.com's AngleRange with a narrow
+        # window (~1.2x the tilt increment) meant only for a quick initial defocus
+        # check near zero tilt. When AutoFitRangeAndStep is also present (as it is
+        # here), AngleRange instead caps the whole autofit extent, silently
+        # restricting CTF autofitting to a few degrees around zero. batchruntomo's
+        # own automation deletes this line before running ctfplotter for exactly
+        # this reason; do the same so AutoFitRangeAndStep governs the full series.
+        self._strip_com_line("ctfplotter.com", "AngleRange")
+
+        run_cmd(["makecomfile", "-root", self.base_name, "-input", "xcorr.com",
                  "-binning", str(patch_binning), "-change", adoc_path.name, "xcorr_pt.com"], cwd=self.work_dir)
         
         self._update_com("xcorr_pt.com", "BordersInXandY", f"{patchtrack_border},{patchtrack_border}")
